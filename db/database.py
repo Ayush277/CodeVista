@@ -8,7 +8,11 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
-DATABASE_URL = "sqlite+aiosqlite:///./app.db"
+# Use /tmp/ directory for SQLite database when running on Vercel (read-only filesystem)
+if os.getenv("VERCEL") == "1" or os.getenv("VERCEL"):
+    DATABASE_URL = "sqlite+aiosqlite:////tmp/app.db"
+else:
+    DATABASE_URL = "sqlite+aiosqlite:///./app.db"
 
 # Create async engine
 engine = create_async_engine(
