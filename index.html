@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeVista — AI-Powered GitHub Repository Analyzer</title>
+    <meta name="description" content="CodeVista — Understand any GitHub codebase in seconds with AI-powered analysis, architecture diagrams, and natural language Q&A.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0d0603;
+            color: #e4e4e7;
+            overflow-x: hidden;
+        }
+
+        /* ─── Animated Gradient Mesh ─── */
+        .mesh-bg {
+            position: fixed; inset: 0; z-index: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(249,115,22,.12), transparent),
+                radial-gradient(ellipse 60% 60% at 80% 20%, rgba(245,158,11,.10), transparent),
+                radial-gradient(ellipse 50% 70% at 50% 90%, rgba(239,68,68,.08), transparent);
+            animation: meshShift 20s ease-in-out infinite alternate;
+        }
+        @keyframes meshShift {
+            0%   { filter: hue-rotate(-15deg) scale(1.05); }
+            100% { filter: hue-rotate(15deg) scale(1); }
+        }
+
+        /* ─── Noise Texture ─── */
+        .noise::before {
+            content: ''; position: fixed; inset: 0; z-index: 1; pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");
+            background-repeat: repeat; opacity: 0.5;
+        }
+
+        /* ─── Glass Card ─── */
+        .glass {
+            background: rgba(255,255,255,.02);
+            border: 1px solid rgba(249,115,22,.08);
+            border-radius: 20px;
+            backdrop-filter: blur(24px) saturate(1.2);
+            transition: all .4s cubic-bezier(.25,.8,.25,1);
+        }
+        .glass:hover {
+            border-color: rgba(249,115,22,.3);
+            box-shadow: 0 12px 40px rgba(249,115,22,.12);
+            transform: translateY(-4px);
+        }
+
+        /* ─── Accent Glow Button ─── */
+        .btn-accent {
+            background: linear-gradient(135deg, #f97316, #f59e0b);
+            color: #fff; border: none; border-radius: 14px;
+            font-weight: 600; cursor: pointer;
+            box-shadow: 0 0 24px rgba(249,115,22,.3), inset 0 1px 0 rgba(255,255,255,.2);
+            transition: all .3s ease;
+        }
+        .btn-accent:hover:not(:disabled) {
+            box-shadow: 0 0 40px rgba(249,115,22,.5), inset 0 1px 0 rgba(255,255,255,.3);
+            transform: translateY(-2px) scale(1.02);
+        }
+        .btn-accent:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+        /* ─── Gradient Heading ─── */
+        .grad-text {
+            background: linear-gradient(135deg, #fdba74 0%, #f97316 40%, #ea580c 70%, #f59e0b 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* ─── Scrollbar ─── */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(249,115,22,.3); border-radius: 10px; }
+
+        /* ─── Chat scroll ─── */
+        .chat-scroll { max-height: 520px; overflow-y: auto; }
+
+        /* ─── Typing dots ─── */
+        .dot-pulse span { animation: pulse-dot 1.4s infinite; opacity: .25; }
+        .dot-pulse span:nth-child(2) { animation-delay: .2s; }
+        .dot-pulse span:nth-child(3) { animation-delay: .4s; }
+        @keyframes pulse-dot { 0%,60%,100%{ opacity:.25 } 30%{ opacity:1 } }
+
+        /* ─── Spinner ─── */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin .8s linear infinite; }
+
+        /* ─── Sidebar nav item ─── */
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 16px; border-radius: 12px;
+            font-size: 14px; font-weight: 500;
+            color: rgba(255,255,255,.55); cursor: pointer;
+            transition: all .2s ease; border: 1px solid transparent;
+        }
+        .nav-item:hover:not(.nav-disabled) { color: #fff; background: rgba(249,115,22,.08); transform: translateX(4px); }
+        .nav-item.active {
+            color: #fff; background: rgba(249,115,22,.15);
+            border-color: rgba(249,115,22,.25);
+            box-shadow: 0 0 20px rgba(249,115,22,.12);
+        }
+        .nav-disabled { opacity: .3; cursor: not-allowed; }
+
+        /* ─── Stat card ─── */
+        .stat-card {
+            background: rgba(255,255,255,.02);
+            border: 1px solid rgba(249,115,22,.08);
+            border-radius: 16px; padding: 24px;
+            transition: all .3s ease;
+        }
+        .stat-card:hover { border-color: rgba(249,115,22,.3); transform: scale(1.02); }
+
+        /* ─── Tag chip ─── */
+        .tag {
+            display: inline-flex; padding: 4px 14px;
+            border-radius: 999px; font-size: 12px; font-weight: 600;
+            background: rgba(249,115,22,.15); color: #fdba74;
+            border: 1px solid rgba(249,115,22,.25);
+        }
+
+        /* ─── Floating orbs ─── */
+        .orb {
+            position: absolute; border-radius: 50%;
+            filter: blur(80px); pointer-events: none;
+        }
+
+        /* ─── Section content card ─── */
+        .content-card {
+            background: rgba(255,255,255,.02);
+            border: 1px solid rgba(255,255,255,.06);
+            border-radius: 16px; padding: 28px;
+            transition: all .3s ease;
+        }
+        .content-card:hover { border-color: rgba(249,115,22,.15); }
+
+        /* ─── Progress shimmer ─── */
+        .shimmer {
+            background: linear-gradient(90deg, rgba(249,115,22,.3), rgba(245,158,11,.6), rgba(249,115,22,.3));
+            background-size: 200% 100%;
+            animation: shimmer 1.8s infinite;
+        }
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+        /* ─── Custom Animations ─── */
+        .animate-fade-in-up {
+            animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        .delay-100 { animation-delay: 100ms; }
+        .delay-200 { animation-delay: 200ms; }
+        .delay-300 { animation-delay: 300ms; }
+        @keyframes fadeInUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .float-anim {
+            animation: float 6s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+
+<body class="noise">
+    <div class="mesh-bg"></div>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // ─── Config ───
+        const isLocal = (location.hostname === '127.0.0.1' || location.hostname === 'localhost') && location.port !== '8000';
+        const API = isLocal ? 'http://127.0.0.1:8000/api' : '/api';
+
+        // ─── Icons (Lucide-style SVG) ───
+        const Icon = ({ d, size = 20 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{d}</svg>
+        );
+        const LogoHex = ({s=24}) => (
+            <img src="/logo.png" width={s} height={s} alt="Logo" style={{borderRadius:'6px', objectFit:'cover'}} />
+        );
+        const Sparkles = LogoHex;
+        const Code = () => <Icon d={<><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></>} />;
+        const Layers = () => <Icon d={<><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>} />;
+        const FileText = () => <Icon d={<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></>} />;
+        const Chat = () => <Icon d={<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/>} />;
+        const AlertCircle = () => <Icon d={<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>} />;
+        const BookOpen = () => <Icon d={<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>} />;
+        const BarChart = () => <Icon d={<><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></>} />;
+        const Send = ({s=18}) => <Icon size={s} d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} />;
+        const Check = () => <Icon d={<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>} />;
+        const XIcon = () => <Icon d={<><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>} />;
+        const Loader = () => <svg className="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>;
+        const ArrowLeft = () => <Icon d={<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>} />;
+        const GitBranch = () => <Icon d={<><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></>} />;
+        const Zap = () => <Icon d={<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>} />;
+        const Shield = () => <Icon d={<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>} />;
+        const Search = () => <Icon d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} />;
+
+        // ─── API layer ───
+        const api = {
+            async analyzeRepo(url) {
+                const r = await fetch(`${API}/analyze-repo`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({repo_url:url}) });
+                if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Failed'); }
+                return r.json();
+            },
+            async getStatus(id) { const r = await fetch(`${API}/status/${id}`); if(!r.ok) throw new Error('Status failed'); return r.json(); },
+            async getAnalysis(id) { const r = await fetch(`${API}/analysis/${id}`); if(!r.ok) { const e = await r.json(); throw new Error(e.detail||'Failed'); } return r.json(); },
+            async ask(id, q) {
+                const r = await fetch(`${API}/ask`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({repo_id:id, question:q}) });
+                if(!r.ok) { const e = await r.json(); throw new Error(e.detail||'Failed'); }
+                return r.json();
+            }
+        };
+
+        // ─── Mermaid Diagram Component ───
+        function DiagramCard({ syntax }) {
+            const ref = useRef(null);
+            const [err, setErr] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                if (!syntax || !ref.current) return;
+                let c = false;
+                (async () => {
+                    try {
+                        const id = `md-${Date.now()}`;
+                        const { svg } = await mermaid.render(id, syntax);
+                        if (!c && ref.current) {
+                            ref.current.innerHTML = svg;
+                            const s = ref.current.querySelector('svg');
+                            if (s) { s.style.width='100%'; s.style.height='auto'; s.style.maxWidth='100%'; s.removeAttribute('height'); }
+                            setLoading(false);
+                        }
+                    } catch { if (!c) { setErr('Diagram unavailable'); setLoading(false); }}
+                })();
+                return () => { c = true; };
+            }, [syntax]);
+
+            return (
+                <div className="content-card mb-6">
+                    <div className="flex items-center gap-3 mb-5">
+                        <div className="w-9 h-9 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-400"><Layers/></div>
+                        <div><h3 className="text-base font-semibold text-white">Architecture Diagram</h3><p className="text-xs text-zinc-500">Auto-generated • Client-side rendered</p></div>
+                    </div>
+                    {loading && !err && <div className="flex items-center justify-center py-12 gap-2 text-zinc-500"><Loader/><span className="text-sm">Rendering…</span></div>}
+                    {err && <div className="p-3 rounded-xl bg-red-500/5 border border-red-500/10 text-red-400 text-sm">{err}</div>}
+                    <div ref={ref} className="overflow-x-auto" style={{display:loading?'none':'block'}}/>
+                </div>
+            );
+        }
+
+        // ════════════════════════════════════════
+        //  LANDING PAGE
+        // ════════════════════════════════════════
+        function Landing({ onAnalyze }) {
+            const [url, setUrl] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const [faq, setFaq] = useState(null);
+
+            const go = async () => {
+                if (!url.trim()) return setError('Please enter a GitHub URL');
+                if (!url.includes('github.com')) return setError('Enter a valid GitHub URL');
+                setError(''); setLoading(true);
+                try { const r = await api.analyzeRepo(url); onAnalyze(r.repo_id, url); }
+                catch (e) { setError(e.message); setLoading(false); }
+            };
+
+            const features = [
+                { icon: <Search/>, title: 'Deep Code Analysis', desc: 'AI scans repo structure, dependencies, and patterns to build a comprehensive understanding of any codebase.' },
+                { icon: <Zap/>, title: 'Instant Insights', desc: 'Get architecture patterns, tech stack, key files, and risk areas — all in under 60 seconds.' },
+                { icon: <Chat/>, title: 'Ask Anything', desc: 'Chat with your analyzed repo using natural language. Get specific, evidence-based answers.' },
+            ];
+
+            const steps = [
+                { n: '01', title: 'Paste a GitHub URL', desc: 'Enter any public repository link — we handle the rest automatically.' },
+                { n: '02', title: 'AI Analyzes Everything', desc: 'Gemini AI examines structure, code, dependencies, and issues in one pass.' },
+                { n: '03', title: 'Explore & Ask', desc: 'Browse insights across 7 tabs or ask questions in natural language.' },
+            ];
+
+            const faqs = [
+                { q: 'What repos can I analyze?', a: 'Any public GitHub repository. Private repos are not currently supported.' },
+                { q: 'How long does it take?', a: 'Most repos are analyzed in 30–60 seconds. You\'ll see real-time progress.' },
+                { q: 'What insights do I get?', a: 'Tech stack, architecture, key files, setup guide, risks, issues, and unlimited Q&A.' },
+                { q: 'Is my data secure?', a: 'We only read public repos. Analysis is cached temporarily for Q&A and never shared.' },
+            ];
+
+            return (
+                <div className="relative z-10 min-h-screen">
+                    {/* ─ Navbar ─ */}
+                    <nav className="sticky top-0 z-50 border-b border-white/5 bg-black/40 backdrop-blur-xl">
+                        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center"><Sparkles s={18}/></div>
+                                <span className="text-lg font-bold text-white tracking-tight">CodeVista</span>
+                            </div>
+                            <div className="hidden md:flex items-center gap-8">
+                                <a href="#features" className="text-sm text-zinc-400 hover:text-white transition-colors">Features</a>
+                                <a href="#how" className="text-sm text-zinc-400 hover:text-white transition-colors">How it works</a>
+                                <a href="#faq" className="text-sm text-zinc-400 hover:text-white transition-colors">FAQ</a>
+                                <button onClick={() => window.scrollTo({top:0,behavior:'smooth'})} className="btn-accent px-5 py-2 text-sm rounded-xl">Get Started</button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* ─ Hero ─ */}
+                    <section className="relative min-h-[90vh] flex items-center justify-center px-6 overflow-hidden">
+                        <div className="orb w-[500px] h-[500px] bg-orange-600/15 -top-40 -left-40"></div>
+                        <div className="orb w-[400px] h-[400px] bg-amber-600/10 bottom-0 right-0"></div>
+
+                        <div className="relative z-10 max-w-4xl mx-auto text-center">
+                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/8 text-xs font-medium text-zinc-400 mb-8 float-anim">
+                                <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"></span>
+                                Powered by Gemini AI
+                            </div>
+
+                            <h1 className="text-6xl md:text-8xl font-black grad-text leading-[1.05] mb-6 tracking-tight animate-fade-in-up">
+                                CodeVista
+                            </h1>
+                            <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto leading-relaxed mb-12 animate-fade-in-up delay-100">
+                                Understand any GitHub codebase in seconds. AI-powered analysis with architecture diagrams, tech stack breakdown, and natural language Q&A.
+                            </p>
+
+                            <div className="max-w-2xl mx-auto animate-fade-in-up delay-200">
+                                <div className="glass p-2">
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <input
+                                            type="text" value={url} onChange={e => setUrl(e.target.value)}
+                                            onKeyDown={e => e.key==='Enter' && go()}
+                                            placeholder="https://github.com/owner/repo"
+                                            className="flex-1 px-5 py-3.5 bg-transparent border border-white/8 rounded-xl text-white placeholder-zinc-600 outline-none focus:border-orange-500/50 transition-colors text-sm"
+                                            disabled={loading}
+                                        />
+                                        <button onClick={go} disabled={loading || !url.trim()} className="btn-accent px-7 py-3.5 text-sm flex items-center justify-center gap-2 whitespace-nowrap">
+                                            {loading ? <><Loader/> Analyzing…</> : <><Sparkles s={18}/> Analyze</>}
+                                        </button>
+                                    </div>
+                                    {error && (
+                                        <div className="mt-2 mx-1 p-3 rounded-xl bg-red-500/8 border border-red-500/15 flex items-center gap-2">
+                                            <XIcon/><span className="text-red-400 text-sm">{error}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* ─ Features ─ */}
+                    <section id="features" className="py-28 px-6">
+                        <div className="max-w-6xl mx-auto">
+                            <div className="text-center mb-16">
+                                <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">Why developers choose CodeVista</h2>
+                                <p className="text-zinc-500 max-w-xl mx-auto">From first glance to deep understanding — in under a minute.</p>
+                            </div>
+                            <div className="grid md:grid-cols-3 gap-5">
+                                {features.map((f, i) => (
+                                    <div key={i} className="glass p-7 group">
+                                        <div className="w-11 h-11 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-400 mb-5 group-hover:bg-orange-500/15 transition-colors">{f.icon}</div>
+                                        <h3 className="text-lg font-semibold text-white mb-2">{f.title}</h3>
+                                        <p className="text-sm text-zinc-500 leading-relaxed">{f.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* ─ How it works ─ */}
+                    <section id="how" className="py-28 px-6">
+                        <div className="max-w-6xl mx-auto">
+                            <div className="text-center mb-16">
+                                <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">How it works</h2>
+                                <p className="text-zinc-500 max-w-xl mx-auto">Three simple steps to understand any codebase.</p>
+                            </div>
+                            <div className="grid md:grid-cols-3 gap-5">
+                                {steps.map((s, i) => (
+                                    <div key={i} className="glass p-7">
+                                        <span className="text-xs font-bold text-orange-400/60 tracking-widest">{s.n}</span>
+                                        <h3 className="text-lg font-semibold text-white mt-3 mb-2">{s.title}</h3>
+                                        <p className="text-sm text-zinc-500 leading-relaxed">{s.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* ─ FAQ ─ */}
+                    <section id="faq" className="py-28 px-6">
+                        <div className="max-w-3xl mx-auto">
+                            <div className="text-center mb-16">
+                                <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">FAQ</h2>
+                            </div>
+                            <div className="space-y-3">
+                                {faqs.map((f, i) => (
+                                    <div key={i} className="glass overflow-hidden">
+                                        <button onClick={() => setFaq(faq===i?null:i)} className="w-full px-6 py-5 flex items-center justify-between text-left">
+                                            <span className="text-sm font-medium text-white">{f.q}</span>
+                                            <svg className={`w-4 h-4 text-zinc-500 transition-transform ${faq===i?'rotate-180':''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                                        </button>
+                                        {faq===i && <div className="px-6 pb-5 text-sm text-zinc-500 leading-relaxed border-t border-white/5 pt-4">{f.a}</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* ─ CTA ─ */}
+                    <section className="py-28 px-6">
+                        <div className="max-w-3xl mx-auto">
+                            <div className="glass p-12 text-center relative overflow-hidden">
+                                <div className="orb w-48 h-48 bg-orange-600/20 -top-20 -right-20"></div>
+                                <div className="orb w-48 h-48 bg-amber-600/15 -bottom-20 -left-20"></div>
+                                <div className="relative z-10">
+                                    <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Ready to explore?</h2>
+                                    <p className="text-zinc-400 mb-8 max-w-md mx-auto">Paste a GitHub URL and get AI-powered insights in under a minute.</p>
+                                    <button onClick={() => window.scrollTo({top:0,behavior:'smooth'})} className="btn-accent px-8 py-4 text-sm inline-flex items-center gap-2">
+                                        <Sparkles s={18}/> Get Started
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* ─ Footer ─ */}
+                    <footer className="border-t border-white/5 py-8 px-6">
+                        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center"><Sparkles s={14}/></div>
+                                <span className="text-sm font-semibold text-white">CodeVista</span>
+                            </div>
+                            <p className="text-xs text-zinc-600">© 2026 CodeVista. Powered by Gemini AI.</p>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        // ════════════════════════════════════════
+        //  DASHBOARD
+        // ════════════════════════════════════════
+        function Dashboard({ repoId, repoUrl, onBack }) {
+            const [tab, setTab] = useState('overview');
+            const [data, setData] = useState(null);
+            const [status, setStatus] = useState('processing');
+            const [error, setError] = useState('');
+            const [chat, setChat] = useState([]);
+            const [q, setQ] = useState('');
+            const [asking, setAsking] = useState(false);
+            const chatEnd = useRef(null);
+
+            useEffect(() => {
+                let iv;
+                const poll = async () => {
+                    try {
+                        const s = await api.getStatus(repoId);
+                        setStatus(s.status);
+                        if (s.status === 'completed') { const a = await api.getAnalysis(repoId); setData(a); clearInterval(iv); }
+                        else if (s.status === 'failed') { setError(s.error_message || 'Analysis failed'); clearInterval(iv); }
+                    } catch (e) { setError(e.message); clearInterval(iv); }
+                };
+                poll();
+                iv = setInterval(poll, 2000);
+                return () => clearInterval(iv);
+            }, [repoId]);
+
+            useEffect(() => { chatEnd.current?.scrollIntoView({behavior:'smooth'}); }, [chat]);
+
+            const askQ = async () => {
+                if (!q.trim() || asking) return;
+                const question = q.trim(); setQ(''); setAsking(true);
+                setChat(p => [...p, {type:'user',text:question}, {type:'typing'}]);
+                try {
+                    const r = await api.ask(repoId, question);
+                    setChat(p => p.filter(m => m.type!=='typing').concat({type:'bot',text:r.answer}));
+                } catch (e) { setChat(p => p.filter(m=>m.type!=='typing').concat({type:'err',text:e.message})); }
+                finally { setAsking(false); }
+            };
+
+            const tabs = [
+                { id:'overview', name:'Overview', icon:<BarChart/> },
+                { id:'tech', name:'Tech Stack', icon:<Code/> },
+                { id:'arch', name:'Architecture', icon:<Layers/> },
+                { id:'files', name:'Key Files', icon:<FileText/> },
+                { id:'chat', name:'Q&A Chat', icon:<Chat/> },
+                { id:'issues', name:'Issues & Risks', icon:<AlertCircle/> },
+                { id:'guide', name:'Contributor Guide', icon:<BookOpen/> },
+            ];
+
+            const repoName = repoUrl.replace('https://github.com/','');
+
+            return (
+                <div className="relative z-10 min-h-screen flex">
+                    {/* ─ Sidebar ─ */}
+                    <aside className="w-72 min-h-screen border-r border-white/5 bg-black/30 backdrop-blur-xl p-5 flex flex-col">
+                        <div className="mb-8">
+                            <div className="flex items-center gap-2.5 mb-2">
+                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center"><Sparkles s={16}/></div>
+                                <span className="text-base font-bold text-white">CodeVista</span>
+                            </div>
+                            <p className="text-xs text-zinc-500 truncate pl-[42px]" title={repoName}>{repoName}</p>
+                        </div>
+
+                        <nav className="flex-1 space-y-1">
+                            {tabs.map(t => (
+                                <button key={t.id}
+                                    onClick={() => setTab(t.id)}
+                                    disabled={status!=='completed' && t.id!=='overview'}
+                                    className={`nav-item w-full ${tab===t.id?'active':''} ${status!=='completed'&&t.id!=='overview'?'nav-disabled':''}`}
+                                >
+                                    {t.icon}<span>{t.name}</span>
+                                </button>
+                            ))}
+                        </nav>
+
+                        {/* Status pill */}
+                        <div className="mt-6 p-3 rounded-xl bg-white/3 border border-white/5">
+                            <div className="flex items-center gap-2 text-sm">
+                                {status==='completed' ? <><Check/><span className="text-emerald-400 font-medium">Complete</span></> :
+                                 status==='processing' ? <><Loader/><span className="text-zinc-400">Analyzing…</span></> :
+                                 <><XIcon/><span className="text-red-400">Failed</span></>}
+                            </div>
+                        </div>
+
+                        <button onClick={onBack} className="mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm text-zinc-500 hover:text-white hover:bg-white/5 transition-all">
+                            <ArrowLeft/> New Analysis
+                        </button>
+                    </aside>
+
+                    {/* ─ Main Content ─ */}
+                    <main className="flex-1 overflow-auto p-8">
+                        {error && (
+                            <div className="mb-6 p-4 rounded-xl bg-red-500/8 border border-red-500/15 flex items-start gap-3">
+                                <XIcon/><div><p className="text-red-400 font-medium text-sm">Error</p><p className="text-red-400/70 text-sm mt-1">{error}</p></div>
+                            </div>
+                        )}
+
+                        {/* Loading state */}
+                        {status==='processing' && tab==='overview' && (
+                            <div className="flex flex-col items-center justify-center min-h-[70vh]">
+                                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center mb-8 shadow-2xl shadow-orange-500/20">
+                                    <Loader/>
+                                </div>
+                                <h2 className="text-2xl font-bold text-white mb-2">Analyzing Repository</h2>
+                                <p className="text-zinc-500 mb-10">This typically takes 30–60 seconds</p>
+                                <div className="w-full max-w-sm mb-10"><div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden"><div className="h-1.5 shimmer rounded-full" style={{width:'65%'}}></div></div></div>
+                                <div className="space-y-3 w-full max-w-sm">
+                                    <div className="flex items-center gap-3 p-4 rounded-xl bg-white/3 border border-white/5 border-l-2 border-l-emerald-500"><Check/><span className="text-sm text-zinc-300">Fetching repository data</span></div>
+                                    <div className="flex items-center gap-3 p-4 rounded-xl bg-white/3 border border-white/5 border-l-2 border-l-orange-500"><Loader/><span className="text-sm text-zinc-300">Analyzing codebase</span></div>
+                                    <div className="flex items-center gap-3 p-4 rounded-xl bg-white/2 border border-white/3 border-l-2 border-l-zinc-700"><span className="w-5"></span><span className="text-sm text-zinc-600">Generating insights</span></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Completed content */}
+                        {status==='completed' && data && (
+                            <>
+                                {/* Overview */}
+                                {tab==='overview' && (
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white mb-6">Project Overview</h2>
+                                        <div className="grid grid-cols-3 gap-4 mb-6">
+                                            {[
+                                                { label:'Confidence', val:`${Math.round((data.confidence_score||0)*100)}%`, icon:<BarChart/>, color:'orange' },
+                                                { label:'Technologies', val:data.tech_stack?.length||0, icon:<Code/>, color:'amber' },
+                                                { label:'Components', val:data.components?.length||0, icon:<Layers/>, color:'emerald' },
+                                            ].map((s,i) => (
+                                                <div key={i} className="stat-card">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <span className="text-xs font-medium text-zinc-500">{s.label}</span>
+                                                        <div className={`w-8 h-8 rounded-lg bg-${s.color}-500/10 flex items-center justify-center text-${s.color}-400`}>{s.icon}</div>
+                                                    </div>
+                                                    <p className="text-3xl font-bold text-white">{s.val}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="content-card mb-4"><h3 className="text-sm font-semibold text-zinc-400 mb-3">SUMMARY</h3><p className="text-sm text-zinc-300 leading-relaxed">{data.summary}</p></div>
+                                        <div className="content-card"><h3 className="text-sm font-semibold text-zinc-400 mb-3">PURPOSE</h3><p className="text-sm text-zinc-300 leading-relaxed">{data.purpose}</p></div>
+                                    </div>
+                                )}
+
+                                {/* Tech Stack */}
+                                {tab==='tech' && (
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white mb-6">Technology Stack</h2>
+                                        {data.tech_stack?.length > 0 ? (
+                                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {data.tech_stack.map((t,i) => (
+                                                    <div key={i} className="glass p-5 group">
+                                                        <div className="flex items-start justify-between mb-2">
+                                                            <h3 className="font-semibold text-white">{t.name}</h3>
+                                                            <span className="tag">{t.category}</span>
+                                                        </div>
+                                                        {t.version && <p className="text-xs text-zinc-500">v{t.version}</p>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : <div className="content-card text-center py-12"><p className="text-zinc-500">No tech stack data</p></div>}
+                                    </div>
+                                )}
+
+                                {/* Architecture */}
+                                {tab==='arch' && (
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white mb-6">Architecture</h2>
+                                        {data.architecture_diagram && <DiagramCard syntax={data.architecture_diagram}/>}
+                                        <div className="content-card mb-4"><h3 className="text-sm font-semibold text-zinc-400 mb-3">PATTERN</h3><p className="text-sm text-zinc-300">{data.architecture_pattern}</p></div>
+                                        <div className="content-card mb-4"><h3 className="text-sm font-semibold text-zinc-400 mb-3">DATA FLOW</h3><p className="text-sm text-zinc-300">{data.data_flow}</p></div>
+                                        {data.components?.length > 0 && (
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-zinc-400 mb-3 mt-6">COMPONENTS</h3>
+                                                <div className="space-y-3">
+                                                    {data.components.map((c,i) => (
+                                                        <div key={i} className="content-card">
+                                                            <h4 className="font-semibold text-white mb-1">{c.name}</h4>
+                                                            <p className="text-sm text-zinc-400 mb-3">{c.purpose}</p>
+                                                            {c.files?.length > 0 && <div className="flex flex-wrap gap-1.5">{c.files.map((f,fi) => <span key={fi} className="text-xs bg-white/5 text-zinc-400 px-2.5 py-1 rounded-lg font-mono">{f}</span>)}</div>}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Files */}
+                                {tab==='files' && (
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white mb-6">Key Files</h2>
+                                        {data.key_files?.length > 0 ? (
+                                            <div className="glass overflow-hidden">
+                                                <table className="w-full">
+                                                    <thead><tr className="border-b border-white/5">
+                                                        <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Path</th>
+                                                        <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Role</th>
+                                                        <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Purpose</th>
+                                                    </tr></thead>
+                                                    <tbody>
+                                                        {data.key_files.map((f,i) => (
+                                                            <tr key={i} className="border-b border-white/3 hover:bg-white/2 transition-colors">
+                                                                <td className="px-5 py-3"><span className="text-sm font-mono text-zinc-300">{f.path}</span></td>
+                                                                <td className="px-5 py-3"><span className="tag">{f.role}</span></td>
+                                                                <td className="px-5 py-3"><span className="text-sm text-zinc-500">{f.purpose}</span></td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : <div className="content-card text-center py-12"><p className="text-zinc-500">No key files identified</p></div>}
+                                    </div>
+                                )}
+
+                                {/* Chat */}
+                                {tab==='chat' && (
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white mb-6">Q&A Chat</h2>
+                                        <div className="glass p-5">
+                                            <div className="chat-scroll mb-5">
+                                                {chat.length===0 ? (
+                                                    <div className="text-center py-16">
+                                                        <div className="w-14 h-14 rounded-xl bg-orange-500/10 flex items-center justify-center mx-auto mb-4 text-orange-400"><Chat/></div>
+                                                        <p className="text-sm text-zinc-300 font-medium mb-1">Ask anything about this repo</p>
+                                                        <p className="text-xs text-zinc-600 mb-6">AI-powered answers based on the analysis</p>
+                                                        <div className="flex flex-wrap justify-center gap-2">
+                                                            {["What is this project about?","How does the architecture work?","What's the main tech stack?"].map((s,i) => (
+                                                                <button key={i} onClick={() => setQ(s)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/8 text-xs text-zinc-400 transition-colors">{s}</button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        {chat.map((m,i) => (
+                                                            <div key={i} className={`flex ${m.type==='user'?'justify-end':'justify-start'}`}>
+                                                                {m.type==='typing' ? (
+                                                                    <div className="px-5 py-3 rounded-2xl bg-white/5 dot-pulse flex gap-1"><span className="w-1.5 h-1.5 bg-zinc-500 rounded-full"></span><span className="w-1.5 h-1.5 bg-zinc-500 rounded-full"></span><span className="w-1.5 h-1.5 bg-zinc-500 rounded-full"></span></div>
+                                                                ) : (
+                                                                    <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${m.type==='user'?'bg-gradient-to-r from-orange-600 to-amber-600 text-white':m.type==='err'?'bg-red-500/8 border border-red-500/15 text-red-400':'bg-white/5 text-zinc-300'}`}>
+                                                                        <p className="text-sm leading-relaxed">{m.text}</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                        <div ref={chatEnd}/>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <input type="text" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&askQ()}
+                                                    placeholder="Ask a question…" disabled={asking}
+                                                    className="flex-1 px-5 py-3 bg-white/3 border border-white/8 rounded-xl text-sm text-white placeholder-zinc-600 outline-none focus:border-orange-500/40 transition-colors"/>
+                                                <button onClick={askQ} disabled={asking||!q.trim()} className="btn-accent px-5 py-3 rounded-xl flex items-center gap-2">
+                                                    {asking?<Loader/>:<Send/>}<span className="text-sm font-medium">Send</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Issues */}
+                                {tab==='issues' && (
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white mb-6">Issues & Risks</h2>
+                                        <div className="space-y-6">
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-zinc-400 mb-3">KNOWN ISSUES</h3>
+                                                {data.known_issues?.length > 0 ? (
+                                                    <div className="space-y-2">{data.known_issues.map((x,i) => <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/5 border border-amber-500/10"><AlertCircle/><p className="text-sm text-zinc-300">{x}</p></div>)}</div>
+                                                ) : <div className="content-card text-center py-8"><p className="text-zinc-500 text-sm">No known issues</p></div>}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-zinc-400 mb-3">RISKY AREAS</h3>
+                                                {data.risky_areas?.length > 0 ? (
+                                                    <div className="space-y-2">{data.risky_areas.map((x,i) => <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-red-500/5 border border-red-500/10"><XIcon/><p className="text-sm text-zinc-300">{x}</p></div>)}</div>
+                                                ) : <div className="content-card text-center py-8"><p className="text-zinc-500 text-sm">No risky areas identified</p></div>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Contributor Guide */}
+                                {tab==='guide' && (
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white mb-6">Contributor Guide</h2>
+                                        <div className="space-y-6">
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-zinc-400 mb-3">SETUP STEPS</h3>
+                                                {data.setup_steps?.length > 0 ? (
+                                                    <div className="content-card"><div className="space-y-4">
+                                                        {data.setup_steps.map((s,i) => (
+                                                            <div key={i} className="flex gap-4">
+                                                                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-orange-500/15 text-orange-400 flex items-center justify-center text-sm font-bold">{i+1}</div>
+                                                                <p className="text-sm text-zinc-300 pt-1.5">{s}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div></div>
+                                                ) : <div className="content-card text-center py-8"><p className="text-zinc-500 text-sm">No setup steps</p></div>}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-zinc-400 mb-3">CONTRIBUTION AREAS</h3>
+                                                {data.contribution_areas?.length > 0 ? (
+                                                    <div className="grid md:grid-cols-2 gap-3">{data.contribution_areas.map((a,i) => (
+                                                        <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10"><Check/><p className="text-sm text-zinc-300">{a}</p></div>
+                                                    ))}</div>
+                                                ) : <div className="content-card text-center py-8"><p className="text-zinc-500 text-sm">No areas identified</p></div>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        // ─── App Root ───
+        function App() {
+            const [view, setView] = useState('landing');
+            const [repoId, setRepoId] = useState(null);
+            const [repoUrl, setRepoUrl] = useState('');
+
+            return view === 'landing'
+                ? <Landing onAnalyze={(id,url) => { setRepoId(id); setRepoUrl(url); setView('dash'); }} />
+                : <Dashboard repoId={repoId} repoUrl={repoUrl} onBack={() => { setView('landing'); setRepoId(null); setRepoUrl(''); }} />;
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+    </script>
+</body>
+</html>
